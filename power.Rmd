@@ -1,0 +1,128 @@
+#
+```{r}
+rm(list=ls())
+gc()
+
+library(dplyr)
+library(data.table)
+library(zoo)
+library(ggplot2)
+data1<-fread("D:/Documents/Tianchi_power/Tianchi_power.csv",data.table=FALSE,header = TRUE)
+
+data1$date<-as.Date(data1$record_date)
+data1$week<-weekdays(data1$date)
+
+data1$week<-as.numeric(factor(data1$week,levels = c("星期一","星期二","星期三","星期四","星期五","星期六","星期日"),labels = c(1:7)))
+data1$year<-as.numeric(substr(data1$date,1,4))
+data1$month<-as.numeric(substr(data1$date,6,7))
+data1$day<-as.numeric(substr(data1$date,9,10))
+
+data1$year_month<-as.character(substr(data1$date,1,7))
+
+data2<-data1
+
+#data1<-data1[data1$month!=2,]
+
+
+#x <- seq(from = as.Date('2013/1/1'), to = as.Date('2014/1/1'), by = '1 day')
+#selectedx <- x[x >= as.Date('2013/1/1') & x <= as.Date('2013/4/1')]
+#截取时间段，去除节假日及附近几天的数据
+x_yuandan1<-seq(from = as.Date('2015/1/1'), to = as.Date('2015/1/5'), by = '1 day')
+x_chunjie1<-seq(from = as.Date('2015/2/11'), to = as.Date('2015/3/3'), by = '1 day')
+x_yuanxiao1<-seq(from = as.Date('2015/3/4'), to = as.Date('2015/3/7'), by = '1 day')
+x_qingming1<-seq(from = as.Date('2015/3/3'), to = as.Date('2015/3/7'), by = '1 day')
+x_naodongjie1<-seq(from = as.Date('2015/4/30'), to = as.Date('2015/5/4'), by = '1 day')
+x_duanwu1<-seq(from = as.Date('2015/6/19'), to = as.Date('2015/6/23'), by = '1 day')
+x_xx1<-seq(from = as.Date('2015/9/2'), to = as.Date('2015/9/6'), by = '1 day')
+x_guoqing1<-seq(from = as.Date('2015/9/25'), to = as.Date('2015/10/10'), by = '1 day')
+
+x_yuandan2<-seq(from = as.Date('2015/12/27'), to = as.Date('2016/1/5'), by = '1 day')
+x_chunjie2<-seq(from = as.Date('2016/2/3'), to = as.Date('2016/2/17'), by = '1 day')
+x_qingming1<-seq(from = as.Date('2016/4/1'), to = as.Date('2016/4/5'), by = '1 day')
+x_naodongjie1<-seq(from = as.Date('2016/4/29'), to = as.Date('2016/5/4'), by = '1 day')
+x_duanwu1<-seq(from = as.Date('2016/6/8'), to = as.Date('2016/6/12'), by = '1 day')
+#x_zhongqiu1<-seq(from = as.Date('2015/9/14'), to = as.Date('2015/9/18'), by = '1 day')
+#x_guoqing1<-seq(from = as.Date('2015/9/29'), to = as.Date('2015/10/10'), by = '1 day')
+
+xx_day<-c(x_yuandan1,x_chunjie1,x_yuanxiao1,x_qingming1,x_naodongjie1,x_xx1,x_guoqing1,x_yuandan2,x_chunjie2,x_qingming1,x_naodongjie1,x_duanwu1)
+
+cc<-which(data1$date %in% xx_day)
+
+data3<-data1[-cc,]
+
+#统计每天的用电总额  每家的总用电量
+t_mean<-function(x){
+  mean(x,trim=0.1)
+}
+
+everyday<-tapply(data1$power_consumption,data1$date,mean)
+day_power_total<-tapply(data3$power_consumption,data3$day,mean)
+co_power_total<-tapply(data3$power_consumption,data3$user_id,mean)
+
+week_power_total<-tapply(data3$power_consumption,data3$week,mean)
+
+ym_power_total<-tapply(data3$power_consumption,data3$year_month,mean)
+
+
+plot(day_power_total,type="b")
+qplot(y=as.numeric(ym_power_total),x=names(ym_power_total),geom=c("point"))
+qplot(y=as.numeric(day_power_total),x=c(1:31),geom=c("point"))
+
+week_rate<-as.numeric(week_power_total/mean(week_power_total))
+day_rate<-day_power_total/mean(day_power_total)
+
+###
+days<-1:30
+day.power<-as.numeric(as.character(day_power_total))[1:30]
+
+da<-data.frame(days,day.power)
+names.da<-names(da)
+
+#用来记录每个日次含有几个星期-到星期日
+day_used<-unique(data3$date)
+date_used<-data.frame(day_used)
+names(date_used)<-c("date")
+date_used$week<-weekdays(date_used$date)
+date_used$week<-as.numeric(factor(date_used$week,levels = c("星期一","星期二","星期三","星期四","星期五","星期六","星期日"),labels = c(1:7)))
+date_used$day<-as.numeric(substr(date_used$date,9,10))
+
+da[,3:9]<-0
+names(da)<-c(names.da,c(1:7))
+
+
+
+for(i in 1:30){
+  for(j in 1:7){
+    
+    da[i,(j+2)]<-nrow(date_used[date_used$week==j & date_used$day==i,])
+    
+  }
+  
+}
+
+da$day_total<-rowSums(da[3:9])
+da$rate_day_total<-0
+
+
+#计算星期对日期的影响
+for(i in 1:30){
+  da[i,11]<-sum(week_rate*da[i,c(3:9)])/(da[i,10])
+}
+
+da$week_9<-rep(1:7,6)[4:33]
+
+#结果
+day<-20160901:20160930
+#d.power<-length(unique(data1$user_id))*(as.numeric(ym_power_total)[20])*da$rate_day_total*(rep(week_rate,6)[4:33])
+d.power<-length(unique(data1$user_id))*day_power_total[1:30]/da$rate_day_total[1:30]*(rep(week_rate,6)[4:33])*(2801*2654/2720/2693)
+
+xx<-data.frame(day,d.power)
+xx[18,2]<-(xx[15,2]+xx[16,2]+xx[19,2])/3
+xx[15,2]<-xx[18,2]*0.88
+xx[16,2]<-xx[18,2]*0.93
+xx[17,2]<-xx[18,2]*0.96
+
+```
+
+
+
